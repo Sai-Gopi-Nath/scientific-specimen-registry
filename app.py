@@ -1,77 +1,98 @@
-import os, sqlite3, re
+import os, re
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date, datetime
+from datetime import date
+import psycopg
+from psycopg import IntegrityError
+from psycopg.rows import dict_row
 from flask import Flask, render_template, request, redirect, url_for, flash, g, session
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "registry.db"))
+DATABASE_URL = os.environ.get("DATABASE_URL")
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key-for-deployment")
+app.secret_key = os.environ.get("SECRET_KEY")
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY must be set in the deployment environment.")
+
+def execute_many(conn, sql, rows):
+    with conn.cursor() as cur:
+        cur.executemany(sql, rows)
 
 def db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL is not configured in Render Environment settings.")
+        g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
     return g.db
 
 @app.teardown_appcontext
 def close_db(error=None):
     conn = g.pop("db", None)
     if conn is not None:
+        if error is not None:
+            conn.rollback()
         conn.close()
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON")
-    with open(os.path.join(BASE_DIR, "schema.sql"), encoding="utf-8") as f:
-        conn.executescript(f.read())
-    conn.execute("""CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-        password_hash TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )""")
-    conn.commit()
-    counts = conn.execute("SELECT COUNT(*) FROM researchers").fetchone()[0]
-    if counts == 0:
-        conn.executemany("INSERT INTO researchers(full_name,email,department) VALUES(?,?,?)", [
-            ("Asha Rao","asha.rao@example.edu","Environmental Science"),
-            ("Ravi Kumar","ravi.kumar@example.edu","Soil Research"),
-            ("Priya Sharma","priya.sharma@example.edu","Botany"),
-            ("Amit Singh","amit.singh@example.edu","Biomedical Science"),
-            ("Neha Verma","neha.verma@example.edu","Atmospheric Science")])
-        conn.executemany("INSERT INTO research_projects(project_code,title,principal_investigator_id,start_date,status) VALUES(?,?,?,?,?)", [
-            ("PRJ-001","Water Quality Study",1,"2025-01-10","Active"),
-            ("PRJ-002","Soil Analysis",2,"2025-02-15","Active"),
-            ("PRJ-003","Plant Tissue Analysis",3,"2025-03-01","Active"),
-            ("PRJ-004","Health Study",4,"2025-03-20","Active"),
-            ("PRJ-005","Air Quality Study",5,"2025-04-05","Active")])
-        conn.executemany("INSERT INTO specimen_types(type_name,description) VALUES(?,?)", [
-            ("Water","Water and aqueous samples"),("Soil","Soil and sediment samples"),
-            ("Plant Tissue","Leaves, stems and other plant material"),("Blood","Approved biomedical samples"),
-            ("Air","Air filter and particulate samples"),("Other","Other research material")])
-        conn.executemany("INSERT INTO storage_locations(location_code,room,storage_condition) VALUES(?,?,?)", [
-            ("LOC-001","Room A / Shelf 1","4°C refrigerated"),("LOC-002","Room B / Cabinet 2","Room temperature"),
-            ("LOC-003","Cold Room / Freezer 1","-20°C frozen")])
-        samples = [
-            ("SMP-001","River Water Sample",1,1,1,"2025-06-01","2025-06-01",2.0,"litres",1,"In Storage","Collected from the north river bank."),
-            ("SMP-002","Soil Sample",2,2,2,"2025-06-05","2025-06-05",3.0,"kg",2,"Registered","Topsoil composite sample."),
-            ("SMP-003","Plant Leaf Tissue",3,3,3,"2025-06-08","2025-06-08",12.0,"g",3,"In Use","Leaf tissue for microscopy."),
-            ("SMP-004","Blood Sample",4,4,4,"2025-06-10","2025-06-10",4.0,"ml",1,"In Storage","Demonstration record; follow institutional biosafety rules."),
-            ("SMP-005","Air Filter Sample",5,5,5,"2025-06-12","2025-06-12",1.0,"filter",2,"Registered","Particulate monitoring filter.")]
-        conn.executemany("""INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes)
-                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""", samples)
-        conn.executemany("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(?,?,?,?,?)", [
-            (1,"Registered","2025-06-01",1,"Initial registry entry"),
-            (2,"Registered","2025-06-05",2,"Initial registry entry"),
-            (3,"Checked out","2025-06-09",3,"Used for analysis"),
-            (4,"Registered","2025-06-10",4,"Initial registry entry"),
-            (5,"Registered","2025-06-12",5,"Initial registry entry")])
-        conn.commit()
-    conn.close()
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not configured in Render Environment settings.")
+    with psycopg.connect(DATABASE_URL) as conn:
+        schema_path = os.path.join(BASE_DIR, "schema.sql")
+        with open(schema_path, encoding="utf-8") as f:
+            schema = f.read()
+        # schema.sql contains simple DDL statements separated by semicolons.
+        for statement in schema.split(";"):
+            if statement.strip():
+                conn.execute(statement)
+        conn.execute("""CREATE TABLE IF NOT EXISTS users (
+            user_id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS login_activity (
+            activity_id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            user_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+            email TEXT NOT NULL,
+            successful BOOLEAN NOT NULL,
+            occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        counts = conn.execute("SELECT COUNT(*) AS count FROM researchers").fetchone()["count"]
+        if counts == 0:
+            execute_many(conn, "INSERT INTO researchers(full_name,email,department) VALUES(%s,%s,%s)", [
+                ("Asha Rao","asha.rao@example.edu","Environmental Science"),
+                ("Ravi Kumar","ravi.kumar@example.edu","Soil Research"),
+                ("Priya Sharma","priya.sharma@example.edu","Botany"),
+                ("Amit Singh","amit.singh@example.edu","Biomedical Science"),
+                ("Neha Verma","neha.verma@example.edu","Atmospheric Science")])
+            execute_many(conn, "INSERT INTO research_projects(project_code,title,principal_investigator_id,start_date,status) VALUES(%s,%s,%s,%s,%s)", [
+                ("PRJ-001","Water Quality Study",1,"2025-01-10","Active"),
+                ("PRJ-002","Soil Analysis",2,"2025-02-15","Active"),
+                ("PRJ-003","Plant Tissue Analysis",3,"2025-03-01","Active"),
+                ("PRJ-004","Health Study",4,"2025-03-20","Active"),
+                ("PRJ-005","Air Quality Study",5,"2025-04-05","Active")])
+            execute_many(conn, "INSERT INTO specimen_types(type_name,description) VALUES(%s,%s)", [
+                ("Water","Water and aqueous samples"),("Soil","Soil and sediment samples"),
+                ("Plant Tissue","Leaves, stems and other plant material"),("Blood","Approved biomedical samples"),
+                ("Air","Air filter and particulate samples"),("Other","Other research material")])
+            execute_many(conn, "INSERT INTO storage_locations(location_code,room,storage_condition) VALUES(%s,%s,%s)", [
+                ("LOC-001","Room A / Shelf 1","4°C refrigerated"),("LOC-002","Room B / Cabinet 2","Room temperature"),
+                ("LOC-003","Cold Room / Freezer 1","-20°C frozen")])
+            samples = [
+                ("SMP-001","River Water Sample",1,1,1,"2025-06-01","2025-06-01",2.0,"litres",1,"In Storage","Collected from the north river bank."),
+                ("SMP-002","Soil Sample",2,2,2,"2025-06-05","2025-06-05",3.0,"kg",2,"Registered","Topsoil composite sample."),
+                ("SMP-003","Plant Leaf Tissue",3,3,3,"2025-06-08","2025-06-08",12.0,"g",3,"In Use","Leaf tissue for microscopy."),
+                ("SMP-004","Blood Sample",4,4,4,"2025-06-10","2025-06-10",4.0,"ml",1,"In Storage","Demonstration record; follow institutional biosafety rules."),
+                ("SMP-005","Air Filter Sample",5,5,5,"2025-06-12","2025-06-12",1.0,"filter",2,"Registered","Particulate monitoring filter.")]
+            execute_many(conn, """INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", samples)
+            execute_many(conn, "INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(%s,%s,%s,%s,%s)", [
+                (1,"Registered","2025-06-01",1,"Initial registry entry"),
+                (2,"Registered","2025-06-05",2,"Initial registry entry"),
+                (3,"Checked out","2025-06-09",3,"Used for analysis"),
+                (4,"Registered","2025-06-10",4,"Initial registry entry"),
+                (5,"Registered","2025-06-12",5,"Initial registry entry")])
 
 @app.context_processor
 def inject_globals():
@@ -106,16 +127,16 @@ def register():
         else:
             try:
                 conn = db()
-                cur = conn.execute("INSERT INTO users(full_name,email,password_hash) VALUES(?,?,?)",
+                cur = conn.execute("INSERT INTO users(full_name,email,password_hash) VALUES(%s,%s,%s) RETURNING user_id",
                                    (name, email, generate_password_hash(password)))
                 conn.commit()
                 session.clear()
-                session["user_id"] = cur.lastrowid
+                session["user_id"] = cur.fetchone()["user_id"]
                 session["user_name"] = name
                 session["user_email"] = email
                 flash("Your account is ready. Welcome to the registry.", "success")
                 return redirect(url_for("dashboard"))
-            except sqlite3.IntegrityError:
+            except IntegrityError:
                 db().rollback()
                 flash("An account with that email already exists. Please sign in.", "error")
     return render_template("auth.html", title="Create account", mode="register")
@@ -127,8 +148,13 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        user = db().execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
-        if user and check_password_hash(user["password_hash"], password):
+        conn = db()
+        user = conn.execute("SELECT * FROM users WHERE email=%s", (email,)).fetchone()
+        valid_login = bool(user and check_password_hash(user["password_hash"], password))
+        conn.execute("INSERT INTO login_activity(user_id,email,successful) VALUES(%s,%s,%s)",
+                     (user["user_id"] if valid_login else None, email or "(empty)", valid_login))
+        conn.commit()
+        if valid_login:
             session.clear()
             session["user_id"] = user["user_id"]
             session["user_name"] = user["full_name"]
@@ -157,10 +183,10 @@ def require_login_for_registry():
 def dashboard():
     conn = db()
     stats = {
-        "samples": conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0],
-        "researchers": conn.execute("SELECT COUNT(*) FROM researchers").fetchone()[0],
-        "projects": conn.execute("SELECT COUNT(*) FROM research_projects").fetchone()[0],
-        "locations": conn.execute("SELECT COUNT(*) FROM storage_locations").fetchone()[0],
+        "samples": conn.execute("SELECT COUNT(*) AS count FROM samples").fetchone()["count"],
+        "researchers": conn.execute("SELECT COUNT(*) AS count FROM researchers").fetchone()["count"],
+        "projects": conn.execute("SELECT COUNT(*) AS count FROM research_projects").fetchone()["count"],
+        "locations": conn.execute("SELECT COUNT(*) AS count FROM storage_locations").fetchone()["count"],
     }
     recent = conn.execute("SELECT * FROM v_sample_registry ORDER BY sample_id DESC LIMIT 6").fetchall()
     events = conn.execute("""SELECT e.event_type,e.event_date,e.details,s.sample_code,r.full_name
@@ -174,10 +200,10 @@ def dashboard():
 def samples():
     q = request.args.get("q","").strip()
     status = request.args.get("status","").strip()
-    sql = "SELECT * FROM v_sample_registry WHERE (sample_code LIKE ? OR sample_name LIKE ? OR project_title LIKE ?)"
+    sql = "SELECT * FROM v_sample_registry WHERE (sample_code LIKE %s OR sample_name LIKE %s OR project_title LIKE %s)"
     args = [f"%{q}%",f"%{q}%",f"%{q}%"]
     if status:
-        sql += " AND status=?"; args.append(status)
+        sql += " AND status=%s"; args.append(status)
     sql += " ORDER BY sample_id DESC"
     rows = db().execute(sql,args).fetchall()
     return render_template("samples.html", title="Samples", active="samples", rows=rows, q=q, selected_status=status)
@@ -186,7 +212,7 @@ def samples():
 @app.route("/samples/<int:sid>/edit", methods=["GET","POST"])
 def sample_form(sid=None):
     conn = db()
-    existing = conn.execute("SELECT * FROM samples WHERE sample_id=?",(sid,)).fetchone() if sid else None
+    existing = conn.execute("SELECT * FROM samples WHERE sample_id=%s",(sid,)).fetchone() if sid else None
     if sid and existing is None:
         flash("Sample record not found.","error"); return redirect(url_for("samples"))
     if request.method == "POST":
@@ -195,15 +221,15 @@ def sample_form(sid=None):
             values = (f["sample_code"].strip(),f["sample_name"].strip(),int(f["type_id"]),int(f["project_id"]),int(f["collected_by"]),f["collection_date"],f["received_date"],float(f["quantity"]),f["unit"].strip(),int(f["location_id"]) if f.get("location_id") else None,f["status"],f.get("notes","").strip())
             if not values[0] or not values[1]: raise ValueError("Sample code and name are required.")
             if sid:
-                conn.execute("""UPDATE samples SET sample_code=?,sample_name=?,type_id=?,project_id=?,collected_by=?,collection_date=?,received_date=?,quantity=?,unit=?,location_id=?,status=?,notes=? WHERE sample_id=?""",values+(sid,))
+                conn.execute("""UPDATE samples SET sample_code=%s,sample_name=%s,type_id=%s,project_id=%s,collected_by=%s,collection_date=%s,received_date=%s,quantity=%s,unit=%s,location_id=%s,status=%s,notes=%s WHERE sample_id=%s""",values+(sid,))
                 event = "Updated"
                 msg = "Sample updated successfully."
             else:
-                cur = conn.execute("""INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",values)
-                sid = cur.lastrowid; event = "Registered"; msg = "Sample added successfully."
-            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(?,?,?,?,?)",(sid,event,date.today().isoformat(),values[4],"Registry form submission"))
+                cur = conn.execute("""INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING sample_id""",values)
+                sid = cur.fetchone()["sample_id"]; event = "Registered"; msg = "Sample added successfully."
+            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(%s,%s,%s,%s,%s)",(sid,event,date.today().isoformat(),values[4],"Registry form submission"))
             conn.commit(); flash(msg,"success"); return redirect(url_for("samples"))
-        except (ValueError, sqlite3.IntegrityError) as e:
+        except (ValueError, IntegrityError) as e:
             conn.rollback(); flash("Could not save record: "+str(e),"error")
     data = {
         "types":conn.execute("SELECT * FROM specimen_types ORDER BY type_name").fetchall(),
@@ -217,9 +243,9 @@ def sample_form(sid=None):
 def delete_sample(sid):
     conn=db()
     try:
-        conn.execute("DELETE FROM samples WHERE sample_id=?",(sid,))
+        conn.execute("DELETE FROM samples WHERE sample_id=%s",(sid,))
         conn.commit(); flash("Sample deleted.","success")
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         conn.rollback(); flash("Unable to delete this sample because related records exist.","error")
     return redirect(url_for("samples"))
 
@@ -265,14 +291,14 @@ def transactions():
         conn=db()
         try:
             conn.execute("BEGIN")
-            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) SELECT sample_id, 'Transaction Demo', ?, collected_by, 'Demonstration event created inside transaction' FROM samples ORDER BY sample_id LIMIT 1",(date.today().isoformat(),))
+            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) SELECT sample_id, 'Transaction Demo', %s, collected_by, 'Demonstration event created inside transaction' FROM samples ORDER BY sample_id LIMIT 1",(date.today().isoformat(),))
             if action=="commit":
                 conn.commit(); result="COMMIT successful: the demonstration event was saved."
             else:
                 conn.rollback(); result="ROLLBACK successful: the demonstration event was cancelled and was not saved."
         except Exception as e:
             conn.rollback(); result="Transaction failed: "+str(e)
-    count=db().execute("SELECT COUNT(*) FROM sample_events").fetchone()[0]
+    count=db().execute("SELECT COUNT(*) AS count FROM sample_events").fetchone()["count"]
     return render_template("transactions.html",title="Transactions",active="transactions",result=result,event_count=count)
 
 @app.route("/health")
