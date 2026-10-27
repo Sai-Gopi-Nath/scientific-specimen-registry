@@ -256,7 +256,21 @@ def researchers():
 
 @app.route("/projects")
 def projects():
-    rows=db().execute("SELECT p.*,r.full_name AS investigator,COUNT(s.sample_id) AS sample_count FROM research_projects p JOIN researchers r ON r.researcher_id=p.principal_investigator_id LEFT JOIN samples s ON s.project_id=p.project_id GROUP BY p.project_id ORDER BY p.project_code").fetchall()
+    rows = db().execute("""
+    SELECT
+        p.*,
+        r.full_name AS investigator,
+        COUNT(s.sample_id) AS sample_count
+    FROM research_projects p
+    JOIN researchers r
+        ON r.researcher_id = p.principal_investigator_id
+    LEFT JOIN samples s
+        ON s.project_id = p.project_id
+    GROUP BY
+        p.project_id,
+        r.full_name
+    ORDER BY p.project_code
+""").fetchall()
     return render_template("simple_table.html",title="Research Projects",active="projects",heading="Research projects",subheading="Project register and sample totals",columns=["Code","Project","Principal investigator","Status","Samples"], rows=rows, kind="projects")
 
 @app.route("/types")
