@@ -1,0 +1,19 @@
+
+digraph Registry {
+ graph [rankdir=LR, bgcolor="white", pad="0.25", nodesep="0.55", ranksep="0.75", fontname="Arial", label="Scientific Research Sample and Laboratory Specimen Registry", labelloc=t, fontsize=18];
+ node [shape=record, style="rounded,filled", fillcolor="#f3f7ff", color="#5b82b5", fontname="Arial", fontsize=9, margin="0.12,0.08"];
+ edge [color="#5378a6", arrowsize=0.7, fontname="Arial", fontsize=8];
+ Researchers [label="{Researchers|PK researcher_id\\lfull_name\\lemail (UNIQUE)\\ldepartment}"];
+ Projects [label="{Research_Projects|PK project_id\\lproject_code (UNIQUE)\\ltitle\\lFK principal_investigator_id\\lstart_date, status}"];
+ Types [label="{Specimen_Types|PK type_id\\ltype_name (UNIQUE)\\ldescription}"];
+ Locations [label="{Storage_Locations|PK location_id\\llocation_code (UNIQUE)\\lroom\\lstorage_condition}"];
+ Samples [label="{Samples|PK sample_id\\lsample_code (UNIQUE)\\lsample_name\\lFK type_id\\lFK project_id\\lFK collected_by\\lcollection_date, received_date\\lquantity, unit\\lFK location_id (nullable)\\lstatus, notes}", fillcolor="#e4f7ee", color="#39956c"];
+ Events [label="{Sample_Events|PK event_id\\lFK sample_id\\levent_type, event_date\\lFK performed_by\\ldetails}"];
+ Researchers -> Projects [label="leads 1:M"];
+ Researchers -> Samples [label="collects 1:M"];
+ Researchers -> Events [label="performs 1:M"];
+ Projects -> Samples [label="includes 1:M"];
+ Types -> Samples [label="classifies 1:M"];
+ Locations -> Samples [label="stores 1:M"];
+ Samples -> Events [label="has 1:M"];
+}

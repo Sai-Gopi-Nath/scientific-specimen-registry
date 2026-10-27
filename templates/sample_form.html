@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><div class="eyebrow">REGISTRY / SAMPLES</div><h1>{{'Edit Sample' if sample else 'Add New Sample'}}</h1><p>Enter the specimen details below</p></div><a class="btn outline" href="{{url_for('samples')}}">← Back to Samples</a></div>
+<form class="panel form-panel" method="post"><div class="form-grid">
+<label>Sample Code *<input name="sample_code" required value="{{sample.sample_code if sample else ''}}" placeholder="e.g. SMP-006"></label>
+<label>Sample Name *<input name="sample_name" required value="{{sample.sample_name if sample else ''}}" placeholder="e.g. Lake Water Sample"></label>
+<label>Specimen Type *<select name="type_id" required>{% for x in types %}<option value="{{x.type_id}}" {% if sample and sample.type_id==x.type_id %}selected{% endif %}>{{x.type_name}}</option>{% endfor %}</select></label>
+<label>Research Project *<select name="project_id" required>{% for x in projects %}<option value="{{x.project_id}}" {% if sample and sample.project_id==x.project_id %}selected{% endif %}>{{x.project_code}} — {{x.title}}</option>{% endfor %}</select></label>
+<label>Collected By *<select name="collected_by" required>{% for x in researchers %}<option value="{{x.researcher_id}}" {% if sample and sample.collected_by==x.researcher_id %}selected{% endif %}>{{x.full_name}}</option>{% endfor %}</select></label>
+<label>Storage Location<select name="location_id"><option value="">Unassigned</option>{% for x in locations %}<option value="{{x.location_id}}" {% if sample and sample.location_id==x.location_id %}selected{% endif %}>{{x.location_code}} — {{x.room}}</option>{% endfor %}</select></label>
+<label>Collection Date *<input type="date" name="collection_date" required value="{{sample.collection_date if sample else today}}"></label>
+<label>Received Date *<input type="date" name="received_date" required value="{{sample.received_date if sample else today}}"></label>
+<label>Quantity *<input type="number" name="quantity" min="0.01" step="0.01" required value="{{sample.quantity if sample else '1'}}"></label>
+<label>Unit *<input name="unit" required value="{{sample.unit if sample else 'sample'}}" placeholder="e.g. ml, g, litres"></label>
+<label>Status *<select name="status" required>{% for st in ['Registered','In Storage','In Use','Consumed','Disposed'] %}<option {% if sample and sample.status==st %}selected{% endif %}>{{st}}</option>{% endfor %}</select></label>
+<label class="full">Notes<textarea name="notes" rows="4" placeholder="Optional notes…">{{sample.notes if sample else ''}}</textarea></label>
+</div><div class="form-actions"><a class="btn outline" href="{{url_for('samples')}}">Cancel</a><button class="btn primary">Save Sample</button></div></form>{% endblock %}

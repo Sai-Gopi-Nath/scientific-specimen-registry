@@ -1,0 +1,57 @@
+erDiagram
+    RESEARCHERS ||--o{ RESEARCH_PROJECTS : leads
+    RESEARCHERS ||--o{ SAMPLES : collects
+    RESEARCHERS ||--o{ SAMPLE_EVENTS : performs
+    RESEARCH_PROJECTS ||--o{ SAMPLES : includes
+    SPECIMEN_TYPES ||--o{ SAMPLES : classifies
+    STORAGE_LOCATIONS o|--o{ SAMPLES : stores
+    SAMPLES ||--o{ SAMPLE_EVENTS : has
+
+    RESEARCHERS {
+      int researcher_id PK
+      string full_name
+      string email UK
+      string department
+    }
+    RESEARCH_PROJECTS {
+      int project_id PK
+      string project_code UK
+      string title
+      int principal_investigator_id FK
+      date start_date
+      string status
+    }
+    SPECIMEN_TYPES {
+      int type_id PK
+      string type_name UK
+      string description
+    }
+    STORAGE_LOCATIONS {
+      int location_id PK
+      string location_code UK
+      string room
+      string storage_condition
+    }
+    SAMPLES {
+      int sample_id PK
+      string sample_code UK
+      string sample_name
+      int type_id FK
+      int project_id FK
+      int collected_by FK
+      date collection_date
+      date received_date
+      float quantity
+      string unit
+      int location_id FK
+      string status
+      string notes
+    }
+    SAMPLE_EVENTS {
+      int event_id PK
+      int sample_id FK
+      string event_type
+      date event_date
+      int performed_by FK
+      string details
+    }

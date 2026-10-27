@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · Scientific Research Registry</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+<div class="auth-shell">
+  <section class="auth-visual">
+    <div class="auth-brand"><span class="auth-mark">✳</span><span>SCIENCE<span class="brand-light"> / REGISTRY</span></span></div>
+    <div class="auth-visual-copy">
+      <div class="auth-kicker"><span class="pulse-dot"></span> RESEARCH OPERATIONS PLATFORM</div>
+      <h1>Every specimen.<br><em>One source of truth.</em></h1>
+      <p>Bring sample records, research projects, storage locations and laboratory activity into one carefully organized workspace.</p>
+      <div class="auth-feature-list"><div><b>01</b><span>Traceable sample records</span></div><div><b>02</b><span>Connected research projects</span></div><div><b>03</b><span>Clear inventory insights</span></div></div>
+    </div>
+    <div class="auth-visual-foot"><span>LABORATORY INFORMATION SYSTEM</span><span>SECURE WORKSPACE · 01</span></div>
+  </section>
+  <section class="auth-main">
+    <div class="auth-mobile-brand">✳ &nbsp; SCIENCE / REGISTRY</div>
+    <div class="auth-card">
+      <div class="auth-overline">{{ 'NEW TO THE REGISTRY?' if mode == 'register' else 'WELCOME BACK' }}</div>
+      <h2>{{ 'Create your account' if mode == 'register' else 'Sign in to your workspace' }}</h2>
+      <p class="auth-subtitle">{{ 'Set up your researcher workspace in a few steps.' if mode == 'register' else 'Enter your credentials to continue to the registry.' }}</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="auth-flashes">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+      <form method="post" class="auth-form">
+        {% if mode == 'register' %}<label>Full name<input name="full_name" autocomplete="name" placeholder="Your full name" required minlength="2" value="{{ request.form.get('full_name','') }}"></label>{% endif %}
+        <label>Email address<div class="auth-input-wrap"><span>✉</span><input type="email" name="email" autocomplete="email" placeholder="you@institution.edu" required value="{{ request.form.get('email','') }}"></div></label>
+        <label>Password<div class="auth-input-wrap"><span>⌑</span><input id="password" type="password" name="password" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}" placeholder="{{ 'At least 8 characters' if mode == 'register' else 'Enter your password' }}" required {% if mode == 'register' %}minlength="8"{% endif %}></div></label>
+        {% if mode == 'register' %}<label>Confirm password<div class="auth-input-wrap"><span>⌑</span><input type="password" name="confirm_password" autocomplete="new-password" placeholder="Re-enter your password" required minlength="8"></div></label>{% endif %}
+        <button class="auth-submit" type="submit">{{ 'Create account' if mode == 'register' else 'Sign in' }} <span>→</span></button>
+      </form>
+      <div class="auth-switch">{{ 'Already have an account?' if mode == 'register' else 'New to the registry?' }} <a href="{{ url_for('login' if mode == 'register' else 'register') }}">{{ 'Sign in' if mode == 'register' else 'Create an account' }}</a></div>
+      <div class="auth-security"><span>◈</span> Passwords are securely hashed before storage.</div>
+    </div>
+    <footer class="auth-footer"><span>SCIENTIFIC RESEARCH SPECIMEN REGISTRY</span><span>BUILT FOR RESEARCH TEAMS</span></footer>
+  </section>
+</div>
+</body></html>

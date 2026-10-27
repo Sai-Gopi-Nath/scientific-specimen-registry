@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><div class="eyebrow">MASTER DATA</div><h1>{{heading}}</h1><p>{{subheading}}</p></div></div>
+<section class="panel"><div class="table-scroll"><table><thead><tr>{% for c in columns %}<th>{{c}}</th>{% endfor %}</tr></thead><tbody>
+{% for r in rows %}<tr>{% if kind=='researchers' %}<td><b>{{r.full_name}}</b></td><td>{{r.email}}</td><td>{{r.department}}</td><td>{{r.sample_count}}</td>
+{% elif kind=='projects' %}<td><b class="code">{{r.project_code}}</b></td><td>{{r.title}}</td><td>{{r.investigator}}</td><td><span class="pill registered">{{r.status}}</span></td><td>{{r.sample_count}}</td>
+{% elif kind=='types' %}<td><b>{{r.type_name}}</b></td><td>{{r.description}}</td><td>{{r.sample_count}}</td>
+{% else %}<td><b class="code">{{r.location_code}}</b></td><td>{{r.room}}</td><td>{{r.storage_condition}}</td><td>{{r.sample_count}}</td>{% endif %}</tr>{% else %}<tr><td colspan="{{columns|length}}" class="empty">No records available.</td></tr>{% endfor %}
+</tbody></table></div></section>{% endblock %}

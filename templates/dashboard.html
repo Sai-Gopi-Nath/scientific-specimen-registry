@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><div class="eyebrow">OVERVIEW</div><h1>Dashboard</h1><p>Overview of your laboratory specimen registry</p></div><a class="btn primary" href="{{url_for('sample_form')}}">＋ Add New Sample</a></div>
+<div class="stats">
+<div class="stat blue"><div class="stat-icon">⚗</div><div><span>Total Samples</span><strong>{{stats.samples}}</strong><small>Tracked in registry</small></div></div>
+<div class="stat green"><div class="stat-icon">♙</div><div><span>Researchers</span><strong>{{stats.researchers}}</strong><small>Registered team members</small></div></div>
+<div class="stat purple"><div class="stat-icon">▰</div><div><span>Research Projects</span><strong>{{stats.projects}}</strong><small>Active project records</small></div></div>
+<div class="stat orange"><div class="stat-icon">⌖</div><div><span>Storage Locations</span><strong>{{stats.locations}}</strong><small>Inventory locations</small></div></div>
+</div>
+<div class="dashboard-grid">
+<section class="panel wide"><div class="panel-head"><div><h2>Recent Samples</h2><p>Latest records in the registry</p></div><a class="btn outline small" href="{{url_for('samples')}}">View All</a></div>
+<div class="table-scroll"><table><thead><tr><th>Sample Code</th><th>Sample Name</th><th>Type</th><th>Project</th><th>Collected By</th><th>Date</th><th>Status</th></tr></thead><tbody>
+{% for s in recent %}<tr><td><b class="code">{{s.sample_code}}</b></td><td>{{s.sample_name}}</td><td>{{s.type_name}}</td><td>{{s.project_title}}</td><td>{{s.collected_by}}</td><td>{{s.collection_date}}</td><td><span class="pill {{s.status|lower|replace(' ','-')}}">{{s.status}}</span></td></tr>{% else %}<tr><td colspan="7" class="empty">No samples yet.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<section class="panel activity"><div class="panel-head"><div><h2>Recent Activity</h2><p>Registry event log</p></div></div>
+{% for e in events %}<div class="activity-item"><div class="activity-icon">{{'＋' if e.event_type=='Registered' else '↻'}}</div><div><strong>{{e.event_type}} · {{e.sample_code}}</strong><p>{{e.details or 'Registry update'}} by {{e.full_name}}</p><small>{{e.event_date}}</small></div></div>{% else %}<p class="muted pad">No activity recorded.</p>{% endfor %}
+<div class="quick-links"><h3>Quick Links</h3><a class="quick blue-bg" href="{{url_for('sample_form')}}">＋ Add New Sample</a><a class="quick green-bg" href="{{url_for('reports')}}">▤ Generate Report</a><a class="quick purple-bg" href="{{url_for('samples')}}">▣ View All Samples</a><a class="quick cyan-bg" href="{{url_for('views')}}">◉ Database Views</a></div>
+</section>
+<section class="panel"><div class="panel-head"><div><h2>Samples by Type</h2><p>Distribution across specimen categories</p></div></div>
+{% set total = stats.samples if stats.samples else 1 %}{% for t in by_type %}<div class="bar-label"><span>{{t.type_name}}</span><b>{{t.n}}</b></div><div class="bar-track"><div class="bar-fill" style="width:{{(t.n/total*100)|round|int}}%"></div></div>{% endfor %}
+</section>
+<section class="panel"><div class="panel-head"><div><h2>Samples by Status</h2><p>Current registry status</p></div></div>
+{% for s in by_status %}<div class="status-row"><span class="pill {{s.status|lower|replace(' ','-')}}">{{s.status}}</span><div class="status-track"><div class="status-fill" style="width:{{(s.n/total*100)|round|int}}%"></div></div><b>{{s.n}}</b></div>{% else %}<p class="muted">No status data yet.</p>{% endfor %}
+</section>
+</div>{% endblock %}

@@ -1,0 +1,289 @@
+import os, sqlite3, re
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import date, datetime
+from flask import Flask, render_template, request, redirect, url_for, flash, g, session
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "registry.db"))
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-key-for-deployment")
+
+def db():
+    if "db" not in g:
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
+    return g.db
+
+@app.teardown_appcontext
+def close_db(error=None):
+    conn = g.pop("db", None)
+    if conn is not None:
+        conn.close()
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    with open(os.path.join(BASE_DIR, "schema.sql"), encoding="utf-8") as f:
+        conn.executescript(f.read())
+    conn.execute("""CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.commit()
+    counts = conn.execute("SELECT COUNT(*) FROM researchers").fetchone()[0]
+    if counts == 0:
+        conn.executemany("INSERT INTO researchers(full_name,email,department) VALUES(?,?,?)", [
+            ("Asha Rao","asha.rao@example.edu","Environmental Science"),
+            ("Ravi Kumar","ravi.kumar@example.edu","Soil Research"),
+            ("Priya Sharma","priya.sharma@example.edu","Botany"),
+            ("Amit Singh","amit.singh@example.edu","Biomedical Science"),
+            ("Neha Verma","neha.verma@example.edu","Atmospheric Science")])
+        conn.executemany("INSERT INTO research_projects(project_code,title,principal_investigator_id,start_date,status) VALUES(?,?,?,?,?)", [
+            ("PRJ-001","Water Quality Study",1,"2025-01-10","Active"),
+            ("PRJ-002","Soil Analysis",2,"2025-02-15","Active"),
+            ("PRJ-003","Plant Tissue Analysis",3,"2025-03-01","Active"),
+            ("PRJ-004","Health Study",4,"2025-03-20","Active"),
+            ("PRJ-005","Air Quality Study",5,"2025-04-05","Active")])
+        conn.executemany("INSERT INTO specimen_types(type_name,description) VALUES(?,?)", [
+            ("Water","Water and aqueous samples"),("Soil","Soil and sediment samples"),
+            ("Plant Tissue","Leaves, stems and other plant material"),("Blood","Approved biomedical samples"),
+            ("Air","Air filter and particulate samples"),("Other","Other research material")])
+        conn.executemany("INSERT INTO storage_locations(location_code,room,storage_condition) VALUES(?,?,?)", [
+            ("LOC-001","Room A / Shelf 1","4°C refrigerated"),("LOC-002","Room B / Cabinet 2","Room temperature"),
+            ("LOC-003","Cold Room / Freezer 1","-20°C frozen")])
+        samples = [
+            ("SMP-001","River Water Sample",1,1,1,"2025-06-01","2025-06-01",2.0,"litres",1,"In Storage","Collected from the north river bank."),
+            ("SMP-002","Soil Sample",2,2,2,"2025-06-05","2025-06-05",3.0,"kg",2,"Registered","Topsoil composite sample."),
+            ("SMP-003","Plant Leaf Tissue",3,3,3,"2025-06-08","2025-06-08",12.0,"g",3,"In Use","Leaf tissue for microscopy."),
+            ("SMP-004","Blood Sample",4,4,4,"2025-06-10","2025-06-10",4.0,"ml",1,"In Storage","Demonstration record; follow institutional biosafety rules."),
+            ("SMP-005","Air Filter Sample",5,5,5,"2025-06-12","2025-06-12",1.0,"filter",2,"Registered","Particulate monitoring filter.")]
+        conn.executemany("""INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""", samples)
+        conn.executemany("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(?,?,?,?,?)", [
+            (1,"Registered","2025-06-01",1,"Initial registry entry"),
+            (2,"Registered","2025-06-05",2,"Initial registry entry"),
+            (3,"Checked out","2025-06-09",3,"Used for analysis"),
+            (4,"Registered","2025-06-10",4,"Initial registry entry"),
+            (5,"Registered","2025-06-12",5,"Initial registry entry")])
+        conn.commit()
+    conn.close()
+
+@app.context_processor
+def inject_globals():
+    return {"today": date.today().isoformat(), "current_user": session.get("user_name")}
+
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if not session.get("user_id"):
+            flash("Please sign in to access the registry.", "error")
+            return redirect(url_for("login", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped_view
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        name = request.form.get("full_name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if len(name) < 2:
+            flash("Enter your full name (at least 2 characters).", "error")
+        elif not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            flash("Enter a valid email address.", "error")
+        elif len(password) < 8:
+            flash("Password must be at least 8 characters long.", "error")
+        elif password != confirm:
+            flash("The passwords do not match.", "error")
+        else:
+            try:
+                conn = db()
+                cur = conn.execute("INSERT INTO users(full_name,email,password_hash) VALUES(?,?,?)",
+                                   (name, email, generate_password_hash(password)))
+                conn.commit()
+                session.clear()
+                session["user_id"] = cur.lastrowid
+                session["user_name"] = name
+                session["user_email"] = email
+                flash("Your account is ready. Welcome to the registry.", "success")
+                return redirect(url_for("dashboard"))
+            except sqlite3.IntegrityError:
+                db().rollback()
+                flash("An account with that email already exists. Please sign in.", "error")
+    return render_template("auth.html", title="Create account", mode="register")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("user_id"):
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        user = db().execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        if user and check_password_hash(user["password_hash"], password):
+            session.clear()
+            session["user_id"] = user["user_id"]
+            session["user_name"] = user["full_name"]
+            session["user_email"] = user["email"]
+            destination = request.args.get("next", "")
+            if not destination.startswith("/") or destination.startswith("//"):
+                destination = url_for("dashboard")
+            return redirect(destination)
+        flash("Email or password is incorrect.", "error")
+    return render_template("auth.html", title="Sign in", mode="login")
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    flash("You have been signed out.", "success")
+    return redirect(url_for("login"))
+
+@app.before_request
+def require_login_for_registry():
+    public_endpoints = {"login", "register", "health", "static"}
+    if request.endpoint and request.endpoint not in public_endpoints and not session.get("user_id"):
+        return redirect(url_for("login", next=request.path))
+
+@app.route("/")
+@app.route("/dashboard")
+def dashboard():
+    conn = db()
+    stats = {
+        "samples": conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0],
+        "researchers": conn.execute("SELECT COUNT(*) FROM researchers").fetchone()[0],
+        "projects": conn.execute("SELECT COUNT(*) FROM research_projects").fetchone()[0],
+        "locations": conn.execute("SELECT COUNT(*) FROM storage_locations").fetchone()[0],
+    }
+    recent = conn.execute("SELECT * FROM v_sample_registry ORDER BY sample_id DESC LIMIT 6").fetchall()
+    events = conn.execute("""SELECT e.event_type,e.event_date,e.details,s.sample_code,r.full_name
+        FROM sample_events e JOIN samples s ON s.sample_id=e.sample_id
+        JOIN researchers r ON r.researcher_id=e.performed_by ORDER BY e.event_id DESC LIMIT 5""").fetchall()
+    by_type = conn.execute("SELECT st.type_name,COUNT(s.sample_id) n FROM specimen_types st LEFT JOIN samples s ON s.type_id=st.type_id GROUP BY st.type_id ORDER BY n DESC").fetchall()
+    by_status = conn.execute("SELECT status,COUNT(*) n FROM samples GROUP BY status ORDER BY n DESC").fetchall()
+    return render_template("dashboard.html", title="Dashboard", active="dashboard", stats=stats, recent=recent, events=events, by_type=by_type, by_status=by_status)
+
+@app.route("/samples")
+def samples():
+    q = request.args.get("q","").strip()
+    status = request.args.get("status","").strip()
+    sql = "SELECT * FROM v_sample_registry WHERE (sample_code LIKE ? OR sample_name LIKE ? OR project_title LIKE ?)"
+    args = [f"%{q}%",f"%{q}%",f"%{q}%"]
+    if status:
+        sql += " AND status=?"; args.append(status)
+    sql += " ORDER BY sample_id DESC"
+    rows = db().execute(sql,args).fetchall()
+    return render_template("samples.html", title="Samples", active="samples", rows=rows, q=q, selected_status=status)
+
+@app.route("/samples/new", methods=["GET","POST"])
+@app.route("/samples/<int:sid>/edit", methods=["GET","POST"])
+def sample_form(sid=None):
+    conn = db()
+    existing = conn.execute("SELECT * FROM samples WHERE sample_id=?",(sid,)).fetchone() if sid else None
+    if sid and existing is None:
+        flash("Sample record not found.","error"); return redirect(url_for("samples"))
+    if request.method == "POST":
+        f = request.form
+        try:
+            values = (f["sample_code"].strip(),f["sample_name"].strip(),int(f["type_id"]),int(f["project_id"]),int(f["collected_by"]),f["collection_date"],f["received_date"],float(f["quantity"]),f["unit"].strip(),int(f["location_id"]) if f.get("location_id") else None,f["status"],f.get("notes","").strip())
+            if not values[0] or not values[1]: raise ValueError("Sample code and name are required.")
+            if sid:
+                conn.execute("""UPDATE samples SET sample_code=?,sample_name=?,type_id=?,project_id=?,collected_by=?,collection_date=?,received_date=?,quantity=?,unit=?,location_id=?,status=?,notes=? WHERE sample_id=?""",values+(sid,))
+                event = "Updated"
+                msg = "Sample updated successfully."
+            else:
+                cur = conn.execute("""INSERT INTO samples(sample_code,sample_name,type_id,project_id,collected_by,collection_date,received_date,quantity,unit,location_id,status,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",values)
+                sid = cur.lastrowid; event = "Registered"; msg = "Sample added successfully."
+            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) VALUES(?,?,?,?,?)",(sid,event,date.today().isoformat(),values[4],"Registry form submission"))
+            conn.commit(); flash(msg,"success"); return redirect(url_for("samples"))
+        except (ValueError, sqlite3.IntegrityError) as e:
+            conn.rollback(); flash("Could not save record: "+str(e),"error")
+    data = {
+        "types":conn.execute("SELECT * FROM specimen_types ORDER BY type_name").fetchall(),
+        "projects":conn.execute("SELECT * FROM research_projects ORDER BY project_code").fetchall(),
+        "researchers":conn.execute("SELECT * FROM researchers ORDER BY full_name").fetchall(),
+        "locations":conn.execute("SELECT * FROM storage_locations ORDER BY location_code").fetchall()
+    }
+    return render_template("sample_form.html", title="Edit Sample" if sid else "Add Sample", active="samples", sample=existing, **data)
+
+@app.post("/samples/<int:sid>/delete")
+def delete_sample(sid):
+    conn=db()
+    try:
+        conn.execute("DELETE FROM samples WHERE sample_id=?",(sid,))
+        conn.commit(); flash("Sample deleted.","success")
+    except sqlite3.IntegrityError:
+        conn.rollback(); flash("Unable to delete this sample because related records exist.","error")
+    return redirect(url_for("samples"))
+
+@app.route("/researchers")
+def researchers():
+    rows=db().execute("SELECT r.*,COUNT(s.sample_id) AS sample_count FROM researchers r LEFT JOIN samples s ON s.collected_by=r.researcher_id GROUP BY r.researcher_id ORDER BY r.full_name").fetchall()
+    return render_template("simple_table.html",title="Researchers",active="researchers",heading="Research team",subheading="Researchers linked to registry samples",columns=["Name","Email","Department","Samples"], rows=rows, kind="researchers")
+
+@app.route("/projects")
+def projects():
+    rows=db().execute("SELECT p.*,r.full_name AS investigator,COUNT(s.sample_id) AS sample_count FROM research_projects p JOIN researchers r ON r.researcher_id=p.principal_investigator_id LEFT JOIN samples s ON s.project_id=p.project_id GROUP BY p.project_id ORDER BY p.project_code").fetchall()
+    return render_template("simple_table.html",title="Research Projects",active="projects",heading="Research projects",subheading="Project register and sample totals",columns=["Code","Project","Principal investigator","Status","Samples"], rows=rows, kind="projects")
+
+@app.route("/types")
+def types():
+    rows=db().execute("SELECT st.*,COUNT(s.sample_id) AS sample_count FROM specimen_types st LEFT JOIN samples s ON s.type_id=st.type_id GROUP BY st.type_id ORDER BY st.type_name").fetchall()
+    return render_template("simple_table.html",title="Specimen Types",active="types",heading="Specimen types",subheading="Classification of registered materials",columns=["Type","Description","Samples"], rows=rows, kind="types")
+
+@app.route("/locations")
+def locations():
+    rows=db().execute("SELECT sl.*,COUNT(s.sample_id) AS sample_count FROM storage_locations sl LEFT JOIN samples s ON s.location_id=sl.location_id GROUP BY sl.location_id ORDER BY sl.location_code").fetchall()
+    return render_template("simple_table.html",title="Storage Locations",active="locations",heading="Storage locations",subheading="Storage inventory by location",columns=["Code","Room","Condition","Samples"], rows=rows, kind="locations")
+
+@app.route("/reports")
+def reports():
+    conn=db()
+    project=conn.execute("SELECT * FROM v_project_sample_counts ORDER BY sample_count DESC").fetchall()
+    storage=conn.execute("SELECT * FROM v_storage_inventory ORDER BY sample_count DESC").fetchall()
+    status=conn.execute("SELECT status,COUNT(*) AS count FROM samples GROUP BY status ORDER BY count DESC").fetchall()
+    return render_template("reports.html",title="Reports",active="reports",project=project,storage=storage,status=status)
+
+@app.route("/views")
+def views():
+    conn=db()
+    rows=conn.execute("SELECT * FROM v_sample_registry ORDER BY sample_id DESC").fetchall()
+    return render_template("views.html",title="Database Views",active="views",rows=rows)
+
+@app.route("/transactions", methods=["GET","POST"])
+def transactions():
+    result=None
+    if request.method=="POST":
+        action=request.form.get("action")
+        conn=db()
+        try:
+            conn.execute("BEGIN")
+            conn.execute("INSERT INTO sample_events(sample_id,event_type,event_date,performed_by,details) SELECT sample_id, 'Transaction Demo', ?, collected_by, 'Demonstration event created inside transaction' FROM samples ORDER BY sample_id LIMIT 1",(date.today().isoformat(),))
+            if action=="commit":
+                conn.commit(); result="COMMIT successful: the demonstration event was saved."
+            else:
+                conn.rollback(); result="ROLLBACK successful: the demonstration event was cancelled and was not saved."
+        except Exception as e:
+            conn.rollback(); result="Transaction failed: "+str(e)
+    count=db().execute("SELECT COUNT(*) FROM sample_events").fetchone()[0]
+    return render_template("transactions.html",title="Transactions",active="transactions",result=result,event_count=count)
+
+@app.route("/health")
+def health():
+    return {"status":"ok"}
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("error.html",title="Page not found",active="",code=404,message="The page you requested could not be found."),404
+
+init_db()
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=int(os.environ.get("PORT",5000)), debug=False)
