@@ -36,7 +36,7 @@ def close_db(error=None):
 def init_db():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not configured in Render Environment settings.")
-    with psycopg.connect(DATABASE_URL) as conn:
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
         schema_path = os.path.join(BASE_DIR, "schema.sql")
         with open(schema_path, encoding="utf-8") as f:
             schema = f.read()
