@@ -81,7 +81,7 @@ def init_db():
             successful BOOLEAN NOT NULL,
             occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
-                conn.execute("""
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
                 token_hash TEXT PRIMARY KEY,
                 user_id BIGINT NOT NULL REFERENCES users(user_id)
