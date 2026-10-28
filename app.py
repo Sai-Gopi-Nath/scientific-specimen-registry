@@ -169,29 +169,69 @@ def register():
                 flash("An account with that email already exists. Please sign in.", "error")
     return render_template("auth.html", title="Create account", mode="register")
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("user_id"):
-        return redirect(url_for("dashboard"))
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
+        login_type = request.form.get("login_type", "user").strip().lower()
+
+        if login_type not in ("user", "admin"):
+            flash("Please select a valid login type.", "error")
+            return render_template("auth.html", title="Sign in", mode="login")
+
         conn = db()
-        user = conn.execute("SELECT * FROM users WHERE email=%s", (email,)).fetchone()
-        valid_login = bool(user and check_password_hash(user["password_hash"], password))
-        conn.execute("INSERT INTO login_activity(user_id,email,successful) VALUES(%s,%s,%s)",
-                     (user["user_id"] if valid_login else None, email or "(empty)", valid_login))
+        user = conn.execute(
+            "SELECT user_id, full_name, email, password_hash FROM users WHERE email=%s",
+            (email,)
+        ).fetchone()
+
+        valid_password = bool(
+            user and check_password_hash(user["password_hash"], password)
+        )
+
+        admin_email = app.config.get("ADMIN_EMAIL", "").strip().lower()
+        is_admin = bool(
+            user and admin_email and user["email"].strip().lower() == admin_email
+        )
+
+        # The selected tab is checked on the server.
+        allowed = (
+            valid_password
+            and (
+                (login_type == "admin" and is_admin)
+                or (login_type == "user" and not is_admin)
+            )
+        )
+
+        conn.execute(
+            "INSERT INTO login_activity(user_id, email, successful) VALUES(%s, %s, %s)",
+            (user["user_id"] if allowed else (user["user_id"] if user else None),
+             email or "(empty)", bool(allowed))
+        )
         conn.commit()
-        if valid_login:
+
+        if allowed:
             session.clear()
             session["user_id"] = user["user_id"]
             session["user_name"] = user["full_name"]
             session["user_email"] = user["email"]
+
+            # Don't allow external or protocol-relative redirect URLs.
             destination = request.args.get("next", "")
             if not destination.startswith("/") or destination.startswith("//"):
-                destination = url_for("dashboard")
-            return redirect(destination)
-        flash("Email or password is incorrect.", "error")
+                destination = ""
+
+            if login_type == "admin":
+                flash("Administrator login successful.", "success")
+                return redirect(url_for("login_history"))
+
+            flash("Login successful.", "success")
+            return redirect(destination or url_for("dashboard"))
+
+        flash("Email or password is incorrect, or this account cannot use that login type.", "error")
+
     return render_template("auth.html", title="Sign in", mode="login")
 
 @app.post("/logout")
