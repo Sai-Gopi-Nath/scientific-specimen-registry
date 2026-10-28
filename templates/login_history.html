@@ -1,0 +1,86 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login History - Specimen Registry</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+        main {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px #00000012;
+        }
+        h1 { margin-top: 0; }
+        .note { color: #64748b; margin-bottom: 20px; }
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th { background: #eef2f7; }
+        .success { color: #15803d; font-weight: bold; }
+        .failed { color: #b91c1c; font-weight: bold; }
+        .back {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .empty { padding: 24px; text-align: center; color: #64748b; }
+    </style>
+</head>
+<body>
+<main>
+    <a class="back" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+    <h1>Login History</h1>
+    <p class="note">Most recent 200 login attempts recorded by the registry.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Date and time</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in login_records %}
+                <tr>
+                    <td>{{ record.email }}</td>
+                    <td>{{ record.occurred_at }}</td>
+                    <td>
+                        {% if record.successful %}
+                        <span class="success">Successful</span>
+                        {% else %}
+                        <span class="failed">Failed</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="empty">No login attempts recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>
