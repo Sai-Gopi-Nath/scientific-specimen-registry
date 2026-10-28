@@ -1,3 +1,4 @@
+import resend
 import secrets
 import hashlib
 from datetime import date, datetime, timedelta, timezone
