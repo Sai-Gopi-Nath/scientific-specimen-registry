@@ -10,6 +10,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, g, 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 app = Flask(__name__)
+app.config["ADMIN_EMAIL"] = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY must be set in the deployment environment.")
