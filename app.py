@@ -1,12 +1,12 @@
-import os, re
-from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import date
 import secrets
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+import os, re
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import date
 import psycopg
 from psycopg import IntegrityError
 from psycopg.rows import dict_row
@@ -14,11 +14,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, g, 
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
 app = Flask(__name__)
 app.config["ADMIN_EMAIL"] = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 app.secret_key = os.environ.get("SECRET_KEY")
+
 if not app.secret_key:
-    # Email settings: values come from Render Environment Variables.
+    raise RuntimeError("SECRET_KEY must be set in the deployment environment.")
+
+# Email settings: values come from Render Environment Variables.
 app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
 app.config["MAIL_PORT"] = 587
 app.config["MAIL_USE_TLS"] = True
@@ -31,7 +35,7 @@ mail = Mail(app)
 
 # Reset tokens are signed using the existing Flask secret key.
 reset_serializer = URLSafeTimedSerializer(app.secret_key)
-    raise RuntimeError("SECRET_KEY must be set in the deployment environment.")
+    
 
 def execute_many(conn, sql, rows):
     with conn.cursor() as cur:
