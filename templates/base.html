@@ -22,11 +22,13 @@
   <div class="nav-label space-top">ANALYTICS</div>
   <a class="{{'active' if active=='reports' else ''}}" href="{{url_for('reports')}}">▥ <span>Reports</span></a>
 
-  <a class="{{'active' if active=='views' else ''}}" href="{{url_for('views')}}">◉ <span>Database Views</span></a>
-  {% if session.get('user_email', '').strip().lower() == config.get('ADMIN_EMAIL', '').strip().lower() and config.get('ADMIN_EMAIL', '') %}
-  <a class="{{'active' if active=='login_history' else ''}}" href="{{url_for('login_history')}}">▤ <span>Login History</span></a>
-  {% endif %}
-  <a class="{{'active' if active=='transactions' else ''}}" href="{{url_for('transactions')}}">⇄ <span>Transactions</span></a>
+<a class="{{'active' if active=='views' else ''}}" href="{{url_for('views')}}">◉ <span>Database Views</span></a>
+
+{% if session.get('user_email', '').strip().lower() == config.get('ADMIN_EMAIL', '').strip().lower() and config.get('ADMIN_EMAIL', '') %}
+<a class="{{'active' if active=='login_history' else ''}}" href="{{url_for('login_history')}}">▤ <span>Login History</span></a>
+{% endif %}
+
+<a class="{{'active' if active=='transactions' else ''}}" href="{{url_for('transactions')}}">⇄ <span>Transactions</span></a>
 
   <div class="sidebar-foot">SCIENTIFIC REGISTRY<br><small>DBMS Project · v1.0</small></div>
 </aside>
