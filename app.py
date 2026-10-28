@@ -129,14 +129,16 @@ def admin_required(view):
 def login_history():
     conn = db()
     rows = conn.execute("""
-        SELECT email, successful, occurred_at
+        SELECT activity_id, user_id, email, successful, occurred_at
         FROM login_activity
         ORDER BY occurred_at DESC
         LIMIT 200
     """).fetchall()
 
-    return render_template("login_history.html", login_records=rows)
-
+    return render_template(
+        "login_history.html",
+        login_records=rows
+    )
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if session.get("user_id"):
