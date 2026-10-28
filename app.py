@@ -15,7 +15,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, g, 
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
+resend.api_key = os.environ.get("RESEND_API_KEY")
 app = Flask(__name__)
 app.config["ADMIN_EMAIL"] = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 app.secret_key = os.environ.get("SECRET_KEY")
@@ -244,16 +244,16 @@ def forgot_password():
                         reset_url = url_for(
                             "reset_password", token=token, _external=True
                         )
-                        msg = Message(
-                            subject="Password reset - Scientific Specimen Registry",
-                            recipients=[email],
-                            body=(
-                                "A password reset was requested for your account.\n\n"
-                                f"Open this link within 30 minutes:\n{reset_url}\n\n"
-                                "If you did not request this, you can ignore this email."
-                            ),
-                        )
-                        mail.send(msg)
+                       resend.Emails.send({
+    "from": os.environ["RESEND_FROM_EMAIL"],
+    "to": [email],
+    "subject": "Password reset - Scientific Specimen Registry",
+    "text": (
+        "A password reset was requested for your account.\n\n"
+        f"Open this link within 30 minutes:\n{reset_url}\n\n"
+        "If you did not request this, you can ignore this email."
+    ),
+})
 
                 flash(message, "success")
             except Exception:
