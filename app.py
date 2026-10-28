@@ -244,16 +244,16 @@ def forgot_password():
                         reset_url = url_for(
                             "reset_password", token=token, _external=True
                         )
-                       resend.Emails.send({
-    "from": os.environ["RESEND_FROM_EMAIL"],
-    "to": [email],
-    "subject": "Password reset - Scientific Specimen Registry",
-    "text": (
-        "A password reset was requested for your account.\n\n"
-        f"Open this link within 30 minutes:\n{reset_url}\n\n"
-        "If you did not request this, you can ignore this email."
-    ),
-})
+                        resend.Emails.send({
+                            "from": os.environ["RESEND_FROM_EMAIL"],
+                            "to": [email],
+                            "subject": "Password reset - Scientific Specimen Registry",
+                            "text": (
+                                "A password reset was requested for your account.\n\n"
+                                f"Open this link within 30 minutes:\n{reset_url}\n\n"
+                                "If you did not request this, you can ignore this email."
+                            ),
+                        })
 
                 flash(message, "success")
             except Exception:
