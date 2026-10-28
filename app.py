@@ -201,6 +201,124 @@ def register():
                 flash("An account with that email already exists. Please sign in.", "error")
     return render_template("auth.html", title="Create account", mode="register")
 
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+
+        # Always show the same message to avoid revealing registered emails.
+        message = (
+            "If an account exists for that email, "
+            "a password reset link will be sent."
+        )
+
+        if email and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+            try:
+                with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+                    user = conn.execute(
+                        "SELECT user_id FROM users WHERE email = %s",
+                        (email,)
+                    ).fetchone()
+
+                    if user:
+                        conn.execute(
+                            """DELETE FROM password_reset_tokens
+                               WHERE user_id = %s AND used_at IS NULL""",
+                            (user["user_id"],)
+                        )
+                        conn.execute(
+                            """INSERT INTO password_reset_tokens
+                               (token_hash, user_id, expires_at)
+                               VALUES (%s, %s, %s)""",
+                            (
+                                token_hash,
+                                user["user_id"],
+                                datetime.now(timezone.utc) + timedelta(minutes=30),
+                            )
+                        )
+
+                        reset_url = url_for(
+                            "reset_password", token=token, _external=True
+                        )
+                        msg = Message(
+                            subject="Password reset - Scientific Specimen Registry",
+                            recipients=[email],
+                            body=(
+                                "A password reset was requested for your account.\n\n"
+                                f"Open this link within 30 minutes:\n{reset_url}\n\n"
+                                "If you did not request this, you can ignore this email."
+                            ),
+                        )
+                        mail.send(msg)
+
+                flash(message, "success")
+            except Exception:
+                app.logger.exception("Password reset request failed")
+                flash(message, "success")
+        else:
+            flash(message, "success")
+
+        return redirect(url_for("forgot_password"))
+
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        reset = conn.execute(
+            """SELECT user_id FROM password_reset_tokens
+               WHERE token_hash = %s
+                 AND used_at IS NULL
+                 AND expires_at > CURRENT_TIMESTAMP""",
+            (token_hash,)
+        ).fetchone()
+
+    if not reset:
+        flash("This reset link is invalid or expired. Please request a new one.", "error")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters long.", "error")
+        elif password != confirm:
+            flash("The passwords do not match.", "error")
+        else:
+            with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+                # Recheck and consume the token atomically.
+                consumed = conn.execute(
+                    """UPDATE password_reset_tokens
+                       SET used_at = CURRENT_TIMESTAMP
+                       WHERE token_hash = %s
+                         AND used_at IS NULL
+                         AND expires_at > CURRENT_TIMESTAMP
+                       RETURNING user_id""",
+                    (token_hash,)
+                ).fetchone()
+
+                if not consumed:
+                    flash("This reset link is invalid or expired. Please request a new one.", "error")
+                    return redirect(url_for("forgot_password"))
+
+                conn.execute(
+                    "UPDATE users SET password_hash = %s WHERE user_id = %s",
+                    (generate_password_hash(password), consumed["user_id"])
+                )
+
+            flash("Your password has been reset. Please sign in.", "success")
+            return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
+
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
