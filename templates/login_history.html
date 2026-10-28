@@ -14,7 +14,7 @@
             color: #1f2937;
         }
         main {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
             background: white;
             padding: 24px;
@@ -23,6 +23,40 @@
         }
         h1 { margin-top: 0; }
         .note { color: #64748b; margin-bottom: 20px; }
+        .back {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: end;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1 1 160px;
+        }
+        input, select, button {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font: inherit;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #1d4ed8; }
         .table-wrap { overflow-x: auto; }
         table {
             width: 100%;
@@ -36,20 +70,54 @@
         th { background: #eef2f7; }
         .success { color: #15803d; font-weight: bold; }
         .failed { color: #b91c1c; font-weight: bold; }
-        .back {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #2563eb;
-            text-decoration: none;
+        .empty {
+            padding: 24px;
+            text-align: center;
+            color: #64748b;
         }
-        .empty { padding: 24px; text-align: center; color: #64748b; }
+        .count {
+            color: #475569;
+            margin: 12px 0;
+        }
     </style>
 </head>
 <body>
 <main>
     <a class="back" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
     <h1>Login History</h1>
-    <p class="note">Most recent 200 login attempts recorded by the registry.</p>
+    <p class="note">Search and filter the most recent 200 recorded login attempts.</p>
+
+    <div class="filters">
+        <div class="field">
+            <label for="emailSearch">Search email</label>
+            <input id="emailSearch" type="search" placeholder="Enter email address">
+        </div>
+
+        <div class="field">
+            <label for="resultFilter">Login result</label>
+            <select id="resultFilter">
+                <option value="all">All results</option>
+                <option value="success">Successful</option>
+                <option value="failed">Failed</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="dateFrom">From date</label>
+            <input id="dateFrom" type="date">
+        </div>
+
+        <div class="field">
+            <label for="dateTo">To date</label>
+            <input id="dateTo" type="date">
+        </div>
+
+        <div class="field">
+            <button type="button" id="resetFilters">Clear filters</button>
+        </div>
+    </div>
+
+    <p class="count" id="resultCount" aria-live="polite"></p>
 
     <div class="table-wrap">
         <table>
@@ -60,9 +128,13 @@
                     <th>Result</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="historyBody">
                 {% for record in login_records %}
-                <tr>
+                <tr
+                    data-email="{{ record.email|lower }}"
+                    data-result="{{ 'success' if record.successful else 'failed' }}"
+                    data-date="{{ record.occurred_at.strftime('%Y-%m-%d') if record.occurred_at.strftime is defined else record.occurred_at|string|truncate(10, true, '') }}"
+                >
                     <td>{{ record.email }}</td>
                     <td>{{ record.occurred_at }}</td>
                     <td>
@@ -74,7 +146,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr>
+                <tr class="empty-row">
                     <td colspan="3" class="empty">No login attempts recorded yet.</td>
                 </tr>
                 {% endfor %}
@@ -82,5 +154,63 @@
         </table>
     </div>
 </main>
+
+<script>
+    const emailSearch = document.getElementById("emailSearch");
+    const resultFilter = document.getElementById("resultFilter");
+    const dateFrom = document.getElementById("dateFrom");
+    const dateTo = document.getElementById("dateTo");
+    const resetButton = document.getElementById("resetFilters");
+    const rows = Array.from(
+        document.querySelectorAll("#historyBody tr[data-email]")
+    );
+    const resultCount = document.getElementById("resultCount");
+    const emptyRow = document.querySelector("#historyBody .empty-row");
+
+    function filterHistory() {
+        const email = emailSearch.value.trim().toLowerCase();
+        const result = resultFilter.value;
+        const from = dateFrom.value;
+        const to = dateTo.value;
+        let visible = 0;
+
+        rows.forEach(row => {
+            const matchesEmail = row.dataset.email.includes(email);
+            const matchesResult =
+                result === "all" || row.dataset.result === result;
+            const rowDate = row.dataset.date;
+            const matchesFrom = !from || rowDate >= from;
+            const matchesTo = !to || rowDate <= to;
+
+            const show =
+                matchesEmail && matchesResult && matchesFrom && matchesTo;
+
+            row.hidden = !show;
+            if (show) visible++;
+        });
+
+        if (emptyRow) {
+            emptyRow.hidden = rows.length > 0;
+        }
+
+        resultCount.textContent =
+            `Showing ${visible} of ${rows.length} login attempts`;
+    }
+
+    [emailSearch, resultFilter, dateFrom, dateTo].forEach(control => {
+        control.addEventListener("input", filterHistory);
+        control.addEventListener("change", filterHistory);
+    });
+
+    resetButton.addEventListener("click", () => {
+        emailSearch.value = "";
+        resultFilter.value = "all";
+        dateFrom.value = "";
+        dateTo.value = "";
+        filterHistory();
+    });
+
+    filterHistory();
+</script>
 </body>
 </html>
