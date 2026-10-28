@@ -4,6 +4,585 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login Activity - Specimen Registry</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f1f4f7;
+            color: #263746;
+            font-size: 14px;
+        }
+
+        .top {
+            background: #e5edf4;
+            border-bottom: 1px solid #c8d4df;
+            padding: 16px 22px;
+        }
+
+        .brand {
+            color: #2879a8;
+            font-size: 23px;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            margin-top: 6px;
+            color: #586b7a;
+            font-size: 12px;
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        .breadcrumb {
+            color: #526c80;
+            margin-bottom: 16px;
+        }
+
+        .breadcrumb strong { color: #2476a5; }
+
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+            border-bottom: 1px solid #bdcbd6;
+            margin-bottom: 20px;
+        }
+
+        .tabs a {
+            display: block;
+            padding: 12px 17px;
+            text-decoration: none;
+            color: #276f9c;
+            border: 1px solid transparent;
+        }
+
+        .tabs a.active {
+            background: white;
+            border: 1px solid #bdcbd6;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+            color: #263746;
+            font-weight: bold;
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid #d4dde5;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 1px 3px #00000008;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 8px;
+        }
+
+        .muted {
+            color: #718191;
+            margin: 0 0 20px;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: end;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 18px 0;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1 1 170px;
+        }
+
+        input, select, button, .button-link {
+            min-height: 37px;
+            border: 1px solid #bfcbd5;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font: inherit;
+            background: white;
+            color: #263746;
+        }
+
+        button, .button-link {
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button:hover, .button-link:hover {
+            background: #edf4f9;
+        }
+
+        .primary {
+            background: #2879a8;
+            color: white;
+            border-color: #2879a8;
+        }
+
+        .primary:hover {
+            background: #1f638b;
+            color: white;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid #d8e0e7;
+            border-radius: 3px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #e9eff5;
+            color: #344b5d;
+            font-weight: bold;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #e1e7ec;
+        }
+
+        tbody tr:nth-child(even) { background: #f8fafc; }
+        tbody tr:hover { background: #edf6fc; }
+        tbody tr[hidden] { display: none; }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .success { color: #18834a; }
+        .failed { color: #c0392b; }
+
+        .action {
+            color: #2476a5;
+            cursor: pointer;
+            background: none;
+            border: 0;
+            padding: 3px 5px;
+            min-height: auto;
+        }
+
+        .action:hover {
+            text-decoration: underline;
+            background: none;
+        }
+
+        .count {
+            color: #637787;
+            margin: 14px 0;
+        }
+
+        .empty {
+            padding: 25px;
+            text-align: center;
+            color: #718191;
+        }
+
+        .back {
+            display: inline-block;
+            margin-bottom: 16px;
+            color: #2476a5;
+            text-decoration: none;
+        }
+
+        .footer {
+            margin-top: 18px;
+            color: #82909c;
+            font-size: 12px;
+        }
+
+        dialog {
+            width: min(500px, calc(100% - 30px));
+            border: 1px solid #cbd5df;
+            border-radius: 7px;
+            padding: 22px;
+        }
+
+        dialog::backdrop { background: #14233380; }
+
+        .detail-row {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5eaf0;
+            overflow-wrap: anywhere;
+        }
+
+        .detail-row strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .container { padding: 10px; }
+            .panel { padding: 12px; }
+            .top { padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+<header class="top">
+    <div class="brand">▤ Database Explorer</div>
+    <div class="subtitle">
+        Scientific Research Sample and Laboratory Specimen Registry
+    </div>
+</header>
+
+<div class="container">
+    <a class="back" href="{{ url_for('dashboard') }}">
+        ← Back to Dashboard
+    </a>
+
+    <div class="breadcrumb">
+        Server: <strong>Registry Database</strong>
+        &nbsp; › &nbsp; Table: <strong>login_activity</strong>
+    </div>
+
+    <nav class="tabs">
+        <a href="#browse" class="active" data-tab="browse">▦ Browse</a>
+        <a href="#structure" data-tab="structure">▤ Structure</a>
+        <a href="#search" data-tab="search">⌕ Search</a>
+        <a href="#export" data-tab="export">⇩ Export</a>
+    </nav>
+
+    <section class="panel" id="browsePanel">
+        <h1>Login Activity</h1>
+        <p class="muted">
+            Recorded authentication attempts. Passwords are not displayed.
+        </p>
+
+        <div class="toolbar">
+            <div class="field">
+                <label for="emailSearch">Filter rows by email</label>
+                <input id="emailSearch" type="search"
+                       placeholder="Search email address...">
+            </div>
+
+            <div class="field">
+                <label for="resultFilter">Login result</label>
+                <select id="resultFilter">
+                    <option value="all">All results</option>
+                    <option value="success">Successful</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="dateFrom">From date</label>
+                <input id="dateFrom" type="date">
+            </div>
+
+            <div class="field">
+                <label for="dateTo">To date</label>
+                <input id="dateTo" type="date">
+            </div>
+
+            <button type="button" id="clearFilters">Clear filters</button>
+            <button type="button" class="primary" id="exportCsv">
+                Export CSV
+            </button>
+        </div>
+
+        <p class="count" id="resultCount" aria-live="polite"></p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Activity ID</th>
+                        <th>Email</th>
+                        <th>Result</th>
+                        <th>Date and time</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    {% for record in login_records %}
+                    <tr
+                        data-id="{{ record.activity_id }}"
+                        data-email="{{ record.email|lower }}"
+                        data-result="{{ 'success' if record.successful else 'failed' }}"
+                        data-date="{{ record.occurred_at.strftime('%Y-%m-%d') if record.occurred_at.strftime is defined else record.occurred_at|string|truncate(10, true, '') }}"
+                        data-time="{{ record.occurred_at }}"
+                    >
+                        <td>{{ record.activity_id }}</td>
+                        <td class="email-cell">{{ record.email }}</td>
+                        <td>
+                            {% if record.successful %}
+                            <span class="status success">Successful</span>
+                            {% else %}
+                            <span class="status failed">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ record.occurred_at }}</td>
+                        <td>
+                            <button type="button" class="action view-record">
+                                View
+                            </button>
+                            <button type="button" class="action copy-record">
+                                Copy
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr class="empty-row">
+                        <td colspan="5" class="empty">
+                            No login attempts recorded yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            Showing up to the 200 most recent recorded login attempts.
+        </div>
+    </section>
+
+    <section class="panel" id="structurePanel" hidden>
+        <h1>Table Structure</h1>
+        <p class="muted">Columns displayed by the login activity viewer.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Column</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>activity_id</td><td>Unique activity record ID</td></tr>
+                    <tr><td>email</td><td>Email entered during the login attempt</td></tr>
+                    <tr><td>successful</td><td>Whether authentication succeeded</td></tr>
+                    <tr><td>occurred_at</td><td>Date and time recorded</td></tr>
+                    <tr><td>user_id</td><td>Associated user ID, when available</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="muted">
+            This is an informational view, not a live database schema inspection.
+        </p>
+    </section>
+
+    <section class="panel" id="searchPanel" hidden>
+        <h1>Search Login Activity</h1>
+        <p class="muted">
+            Enter search criteria, then return to Browse to see matching rows.
+        </p>
+        <div class="field">
+            <label for="advancedEmail">Email contains</label>
+            <input id="advancedEmail" type="search"
+                   placeholder="Enter part or all of an email">
+        </div>
+        <div class="field" style="margin-top:12px">
+            <label for="advancedResult">Result</label>
+            <select id="advancedResult">
+                <option value="all">All results</option>
+                <option value="success">Successful</option>
+                <option value="failed">Failed</option>
+            </select>
+        </div>
+        <button type="button" class="primary" id="applySearch"
+                style="margin-top:15px">Apply search</button>
+    </section>
+
+    <section class="panel" id="exportPanel" hidden>
+        <h1>Export Records</h1>
+        <p class="muted">
+            Download the records currently matching your filters as a CSV file.
+        </p>
+        <button type="button" class="primary" id="exportCsv2">
+            ⇩ Download filtered CSV
+        </button>
+    </section>
+</div>
+
+<dialog id="recordDialog">
+    <h2>Login Activity Details</h2>
+    <div id="recordDetails"></div>
+    <button type="button" id="closeDialog" class="primary"
+            style="margin-top:16px">Close</button>
+</dialog>
+
+<script>
+    const emailSearch = document.getElementById("emailSearch");
+    const resultFilter = document.getElementById("resultFilter");
+    const dateFrom = document.getElementById("dateFrom");
+    const dateTo = document.getElementById("dateTo");
+    const rows = Array.from(
+        document.querySelectorAll("#historyBody tr[data-id]")
+    );
+    const resultCount = document.getElementById("resultCount");
+    const dialog = document.getElementById("recordDialog");
+    const recordDetails = document.getElementById("recordDetails");
+
+    function filterRows() {
+        const email = emailSearch.value.trim().toLowerCase();
+        const result = resultFilter.value;
+        const from = dateFrom.value;
+        const to = dateTo.value;
+        let visible = 0;
+
+        rows.forEach(row => {
+            const matchEmail = row.dataset.email.includes(email);
+            const matchResult =
+                result === "all" || row.dataset.result === result;
+            const matchFrom = !from || row.dataset.date >= from;
+            const matchTo = !to || row.dataset.date <= to;
+            const show = matchEmail && matchResult && matchFrom && matchTo;
+
+            row.hidden = !show;
+            if (show) visible++;
+        });
+
+        resultCount.textContent =
+            `Showing ${visible} of ${rows.length} loaded records`;
+    }
+
+    [emailSearch, resultFilter, dateFrom, dateTo].forEach(element => {
+        element.addEventListener("input", filterRows);
+        element.addEventListener("change", filterRows);
+    });
+
+    document.getElementById("clearFilters").addEventListener("click", () => {
+        emailSearch.value = "";
+        resultFilter.value = "all";
+        dateFrom.value = "";
+        dateTo.value = "";
+        document.getElementById("advancedEmail").value = "";
+        document.getElementById("advancedResult").value = "all";
+        filterRows();
+    });
+
+    function showPanel(name) {
+        ["browse", "structure", "search", "export"].forEach(tab => {
+            document.getElementById(tab + "Panel").hidden = tab !== name;
+            document.querySelector(`[data-tab="${tab}"]`)
+                .classList.toggle("active", tab === name);
+        });
+        if (name === "search") {
+            document.getElementById("advancedEmail").value = emailSearch.value;
+            document.getElementById("advancedResult").value = resultFilter.value;
+        }
+    }
+
+    document.querySelectorAll("[data-tab]").forEach(link => {
+        link.addEventListener("click", event => {
+            event.preventDefault();
+            showPanel(link.dataset.tab);
+        });
+    });
+
+    document.getElementById("applySearch").addEventListener("click", () => {
+        emailSearch.value = document.getElementById("advancedEmail").value;
+        resultFilter.value = document.getElementById("advancedResult").value;
+        filterRows();
+        showPanel("browse");
+    });
+
+    rows.forEach(row => {
+        row.querySelector(".view-record").addEventListener("click", () => {
+            const values = [
+                ["Activity ID", row.dataset.id],
+                ["Email", row.querySelector(".email-cell").textContent.trim()],
+                ["Result", row.dataset.result === "success" ? "Successful" : "Failed"],
+                ["Date and time", row.dataset.time]
+            ];
+            recordDetails.replaceChildren();
+
+            values.forEach(([label, value]) => {
+                const item = document.createElement("div");
+                item.className = "detail-row";
+                const heading = document.createElement("strong");
+                heading.textContent = label;
+                const content = document.createElement("span");
+                content.textContent = value;
+                item.append(heading, content);
+                recordDetails.appendChild(item);
+            });
+
+            dialog.showModal();
+        });
+
+        row.querySelector(".copy-record").addEventListener("click", async event => {
+            const text = [
+                row.dataset.id,
+                row.querySelector(".email-cell").textContent.trim(),
+                row.dataset.result,
+                row.dataset.time
+            ].join("\t");
+
+            try {
+                await navigator.clipboard.writeText(text);
+                event.currentTarget.textContent = "Copied!";
+                setTimeout(() => event.currentTarget.textContent = "Copy", 1200);
+            } catch {
+                window.prompt("Copy this record:", text);
+            }
+        });
+    });
+
+    document.getElementById("closeDialog").addEventListener("click", () => {
+        dialog.close();
+    });
+
+    function exportCsv() {
+        const visibleRows = rows.filter(row => !row.hidden);
+        const csvCell = value =>
+            '"' + String(value).replace(/"/g, '""') + '"';
+
+        const lines = [
+            ["Activity ID", "Email", "Result", "Date and time"],
+            ...visibleRows.map(row => [
+                row.dataset.id,
+                row.querySelector(".email-cell").textContent.trim(),
+                row.dataset.result === "success" ? "Successful" : "Failed",
+                row.dataset.time
+            ])
+        ];
+
+        const csv = lines.map(line => line.map(csvCell).join(",")).join("\r\n");
+        const blob = new Blob(["\uFEFF" + csv], {
+            type: "text/csv;charset=utf-8;"
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "login_activity.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("exportCsv").addEventListener("click", exportCsv);
+    document.getElementById("exportCsv2").addEventListener("click", exportCsv);
+
+    filterRows();
+</script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login History - Specimen Registry</title>
     <style>
         body {
