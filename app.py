@@ -2,6 +2,11 @@ import os, re
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import date
+import secrets
+import hashlib
+from datetime import date, datetime, timedelta, timezone
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import psycopg
 from psycopg import IntegrityError
 from psycopg.rows import dict_row
@@ -13,6 +18,19 @@ app = Flask(__name__)
 app.config["ADMIN_EMAIL"] = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
+    # Email settings: values come from Render Environment Variables.
+app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+app.config["MAIL_PORT"] = 587
+app.config["MAIL_USE_TLS"] = True
+app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "")
+app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "")
+app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_USERNAME", "")
+
+mail = Mail(app)
+
+# Reset tokens are signed using the existing Flask secret key.
+reset_serializer = URLSafeTimedSerializer(app.secret_key)
     raise RuntimeError("SECRET_KEY must be set in the deployment environment.")
 
 def execute_many(conn, sql, rows):
@@ -59,6 +77,16 @@ def init_db():
             successful BOOLEAN NOT NULL,
             occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+                conn.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                token_hash TEXT PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(user_id)
+                    ON DELETE CASCADE,
+                expires_at TIMESTAMPTZ NOT NULL,
+                used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         counts = conn.execute("SELECT COUNT(*) AS count FROM researchers").fetchone()["count"]
         if counts == 0:
             execute_many(conn, "INSERT INTO researchers(full_name,email,department) VALUES(%s,%s,%s)", [
