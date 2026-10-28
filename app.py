@@ -5,7 +5,7 @@ from datetime import date
 import psycopg
 from psycopg import IntegrityError
 from psycopg.rows import dict_row
-from flask import Flask, render_template, request, redirect, url_for, flash, g, session
+from flask import Flask, render_template, request, redirect, url_for, flash, g, session, abort
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -106,6 +106,35 @@ def login_required(view):
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
     return wrapped_view
+def admin_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        admin_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+
+        if not session.get("user_id"):
+            flash("Please sign in first.", "error")
+            return redirect(url_for("login", next=request.path))
+
+        if not admin_email or session.get("user_email", "").strip().lower() != admin_email:
+            abort(403)
+
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+@app.route("/login-history")
+@admin_required
+def login_history():
+    conn = db()
+    rows = conn.execute("""
+        SELECT email, successful, occurred_at
+        FROM login_activity
+        ORDER BY occurred_at DESC
+        LIMIT 200
+    """).fetchall()
+
+    return render_template("login_history.html", login_records=rows)
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
