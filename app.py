@@ -272,11 +272,25 @@ def logout():
     flash("You have been signed out.", "success")
     return redirect(url_for("login"))
 
+
 @app.before_request
 def require_login_for_registry():
-    public_endpoints = {"login", "register", "health", "static"}
-    if request.endpoint and request.endpoint not in public_endpoints and not session.get("user_id"):
+    public_endpoints = {
+        "login",
+        "register",
+        "health",
+        "static",
+        "forgot_password",
+        "reset_password",
+    }
+
+    if (
+        request.endpoint
+        and request.endpoint not in public_endpoints
+        and not session.get("user_id")
+    ):
         return redirect(url_for("login", next=request.path))
+
 
 @app.route("/")
 @app.route("/dashboard")
